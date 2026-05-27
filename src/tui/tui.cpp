@@ -1,6 +1,5 @@
 #include "tui.hpp"
 #include "term.hpp"
-
 #include <iostream>
 #include <algorithm>
 #include <termios.h>
@@ -43,6 +42,7 @@ static void write_out(std::string_view s) {
     std::cout.flush();
 }
 
+// ── Input parser ─────────────────────────────────────────────────────────
 InputEvent parse_input(const char* buf, size_t len) {
     InputEvent ev;
     if (len == 0) return ev;
@@ -65,7 +65,7 @@ InputEvent parse_input(const char* buf, size_t len) {
         if (len >= 2) { ev.alt = true; ev.ch = buf[1]; }
         return ev;
     }
-    if (buf[0] < 0x20) {
+    if ((unsigned char)buf[0] < 0x20 || buf[0] == 0x7F) {
         ev.ctrl = true;
         if (buf[0] == 0x7F) ev.key = Key::Backspace;
         else if (buf[0] == 0x09) ev.key = Key::Tab;
@@ -73,10 +73,13 @@ InputEvent parse_input(const char* buf, size_t len) {
         else ev.key = static_cast<Key>(buf[0]);
         return ev;
     }
+    // Printable (ASCII or multi-byte UTF-8)
     ev.ch = buf[0];
+    ev.text = std::string(buf, len);
     return ev;
 }
 
+// ── TUI ───────────────────────────────────────────────────────────────────
 TUI::TUI() { get_term_size(width_, height_); }
 
 TUI::~TUI() {
@@ -117,28 +120,27 @@ void TUI::run(Container* root) {
 
         InputEvent ev = parse_input(buf, n);
 
-        // Global keys
-        if (ev.key == Key::PageUp) {
-            set_scroll(scroll_offset_ + std::max(1, height_ / 3));
-            continue;
-        }
+        if (ev.key == Key::PageUp) { set_scroll(scroll_offset_ + std::max(1, height_ / 3)); continue; }
         if (ev.key == Key::PageDown) {
-            if (scroll_offset_ > 0)
-                set_scroll(scroll_offset_ - std::max(1, height_ / 3));
-            else
-                scroll_to_bottom();
+            if (scroll_offset_ > 0) set_scroll(scroll_offset_ - std::max(1, height_ / 3));
+            else scroll_to_bottom();
             continue;
         }
         if (ev.key == Key::CtrlC || ev.key == Key::CtrlQ) break;
         if (ev.key == Key::Escape) { hide_overlay(); continue; }
 
         // Overlay input
-        if (!overlay_lines_.empty()) continue;
+        if (!overlay_lines_.empty()) {
+            if (ev.key == Key::Up && overlay_cursor_ >= 0) { set_overlay_cursor(std::max(0, overlay_cursor_ - 1)); continue; }
+            if (ev.key == Key::Down && overlay_cursor_ >= 0) { set_overlay_cursor(std::min((int)overlay_lines_.size()-1, overlay_cursor_ + 1)); continue; }
+            if (ev.key == Key::Enter && on_overlay_act && overlay_cursor_ >= 0) { on_overlay_act(overlay_cursor_, overlay_cursor_); continue; }
+            continue;
+        }
 
-        // Dispatch to root
-        if (root_)
-            root_->handle_input(ev);
-
+        // Dispatch to root + key handler
+        bool handled = false;
+        if (on_key) handled = on_key(ev);
+        if (!handled && root_) root_->handle_input(ev);
         request_render();
     }
 
@@ -152,14 +154,12 @@ void TUI::request_render(bool immediate) {
     cv_.notify_one();
 }
 
-void TUI::show_overlay(const std::vector<std::string>& lines) {
-    overlay_lines_ = lines;
-    request_render(true);
+void TUI::show_overlay(const std::vector<std::string>& lines, int cursor) {
+    overlay_lines_ = lines; overlay_cursor_ = cursor; request_render(true);
 }
 
 void TUI::hide_overlay() {
-    overlay_lines_.clear();
-    request_render(true);
+    overlay_lines_.clear(); overlay_cursor_ = -1; request_render(true);
 }
 
 void TUI::render_loop() {
@@ -168,8 +168,7 @@ void TUI::render_loop() {
         std::unique_lock lk(mtx_);
         cv_.wait_for(lk, rate_limit_, [this] { return render_pending_ || !running_; });
         if (!running_) break;
-        bool imm = render_immediate_;
-        render_pending_ = render_immediate_ = false;
+        bool imm = render_immediate_; render_pending_ = render_immediate_ = false;
         lk.unlock();
         auto now = std::chrono::steady_clock::now();
         if (!imm && (now - last_render_) < rate_limit_)
@@ -186,70 +185,56 @@ void TUI::do_render() {
     auto lines = root_->render(width_);
     content_height_ = (int)lines.size();
 
-    int viewport_lines = height_ - 2;
-    int scroll_max = std::max(0, content_height_ - viewport_lines);
-
-    // Auto-scroll: when content grows and we're at the bottom, follow
+    int vp_lines = height_ - 2;
+    int scroll_max = std::max(0, content_height_ - vp_lines);
     if (auto_scroll_) scroll_offset_ = scroll_max;
     else scroll_offset_ = std::clamp(scroll_offset_, 0, scroll_max);
 
-    // Build viewport
-    std::vector<std::string> viewport;
-    int start_line = scroll_offset_;
-    int end_line = std::min((int)lines.size(), start_line + viewport_lines);
+    std::vector<std::string> vp;
+    int start = scroll_offset_;
+    int end = std::min((int)lines.size(), start + vp_lines);
+    for (int i = start; i < end; ++i) vp.push_back(lines[i]);
+    while ((int)vp.size() < vp_lines) vp.push_back(std::string(width_, ' '));
 
-    for (int i = start_line; i < end_line; ++i)
-        viewport.push_back(lines[i]);
+    if (scroll_offset_ > 0 && vp_lines > 0)
+        vp[0] = term::scroll_indicator(content_height_ - scroll_offset_, content_height_, width_);
 
-    // Pad if short
-    while ((int)viewport.size() < viewport_lines)
-        viewport.push_back(std::string(width_, ' '));
-
-    // Add scroll indicator if not at bottom
-    if (scroll_offset_ > 0 && viewport_lines > 0) {
-        viewport[0] = term::scroll_indicator(content_height_ - scroll_offset_, content_height_, width_);
-    }
-
-    // Composite overlay
+    // Overlay
     if (!overlay_lines_.empty()) {
-        int ov_w = std::min(width_ - 4, 60);
-        int ov_h = (int)overlay_lines_.size();
-        int ov_x = (width_ - ov_w) / 2;
-        int ov_y = (viewport_lines - ov_h) / 2;
-        if (ov_y < 0) ov_y = 0;
+        int ow = std::min(width_ - 4, 60);
+        int oh = (int)overlay_lines_.size();
+        int ox = (width_ - ow) / 2;
+        int oy = (vp_lines - oh) / 2;
+        if (oy < 0) oy = 0;
 
-        auto ov_line = [&](int row, const std::string& content) {
-            if (row < 0 || row >= (int)viewport.size()) return;
-            std::string& tgt = viewport[row];
+        auto draw_line = [&](int row, const std::string& s) {
+            if (row < 0 || row >= (int)vp.size()) return;
             std::string l = term::fg(theme_.accent) + term::box_vert() + term::RESET
-                          + " " + content
-                          + std::string(std::max(0, ov_w - (int)content.size()), ' ')
-                          + " " + term::fg(theme_.accent) + term::box_vert() + term::RESET;
-            if (ov_x + (int)l.size() <= (int)tgt.size())
-                tgt.replace(ov_x, l.size(), l);
+                            + " " + s + std::string(std::max(0, ow - (int)s.size()), ' ')
+                            + " " + term::fg(theme_.accent) + term::box_vert() + term::RESET;
+            if (ox + (int)l.size() <= (int)vp[row].size())
+                vp[row].replace(ox, l.size(), l);
         };
 
-        // Top border
-        if (ov_y < (int)viewport.size()) {
-            std::string top = term::fg(theme_.accent) + term::box_tl() + term::box_horiz(ov_w) + term::box_tr() + term::RESET;
-            if (ov_x + (int)top.size() <= (int)viewport[ov_y].size())
-                viewport[ov_y].replace(ov_x, top.size(), top);
+        if (oy < (int)vp.size()) {
+            std::string t = term::fg(theme_.accent) + term::box_tl() + term::box_horiz(ow) + term::box_tr() + term::RESET;
+            if (ox + (int)t.size() <= (int)vp[oy].size()) vp[oy].replace(ox, t.size(), t);
         }
-
-        for (int i = 0; i < ov_h; ++i)
-            ov_line(ov_y + 1 + i, overlay_lines_[i]);
-
-        // Bottom border
-        int bot_row = ov_y + 1 + ov_h;
-        if (bot_row < (int)viewport.size()) {
-            std::string bot = term::fg(theme_.accent) + term::box_bl() + term::box_horiz(ov_w) + term::box_br() + term::RESET;
-            if (ov_x + (int)bot.size() <= (int)viewport[bot_row].size())
-                viewport[bot_row].replace(ov_x, bot.size(), bot);
+        for (int i = 0; i < oh; ++i) {
+            std::string content = overlay_lines_[i];
+            if (i == overlay_cursor_ && overlay_cursor_ >= 0)
+                content = term::REVERSE + content + term::RESET;
+            draw_line(oy + 1 + i, content);
+        }
+        int br = oy + 1 + oh;
+        if (br < (int)vp.size()) {
+            std::string b = term::fg(theme_.accent) + term::box_bl() + term::box_horiz(ow) + term::box_br() + term::RESET;
+            if (ox + (int)b.size() <= (int)vp[br].size()) vp[br].replace(ox, b.size(), b);
         }
     }
 
-    apply_diff(viewport);
-    prev_lines_ = viewport;
+    apply_diff(vp);
+    prev_lines_ = vp;
     prev_width_ = width_;
 }
 
@@ -264,30 +249,18 @@ void TUI::apply_diff(const std::vector<std::string>& new_lines) {
         return;
     }
 
-    int first_diff = -1, last_diff = -1;
+    int fd = -1, ld = -1;
     size_t n = std::min(prev_lines_.size(), new_lines.size());
+    for (size_t i = 0; i < n; ++i)
+        if (prev_lines_[i] != new_lines[i]) { if (fd == -1) fd = i; ld = i; }
+    if (new_lines.size() > prev_lines_.size()) { if (fd == -1) fd = prev_lines_.size(); ld = new_lines.size() - 1; }
+    if (new_lines.size() < prev_lines_.size()) { if (fd == -1) fd = new_lines.size(); ld = prev_lines_.size() - 1; }
+    if (fd == -1) return;
 
-    for (size_t i = 0; i < n; ++i) {
-        if (prev_lines_[i] != new_lines[i]) {
-            if (first_diff == -1) first_diff = i;
-            last_diff = i;
-        }
-    }
-    if (new_lines.size() > prev_lines_.size()) {
-        first_diff = first_diff == -1 ? prev_lines_.size() : first_diff;
-        last_diff = new_lines.size() - 1;
-    }
-    if (new_lines.size() < prev_lines_.size()) {
-        first_diff = first_diff == -1 ? new_lines.size() : first_diff;
-        last_diff = prev_lines_.size() - 1;
-    }
-    if (first_diff == -1) return;
-
-    first_diff = std::min(first_diff, (int)new_lines.size() - 1);
-    last_diff = std::min(last_diff, (int)new_lines.size() - 1);
-
-    for (int i = first_diff; i <= last_diff; ++i) {
-        write_out(term::move_to(i + 1, 1));
+    fd = std::min(fd, (int)new_lines.size()-1);
+    ld = std::min(ld, (int)new_lines.size()-1);
+    for (int i = fd; i <= ld; ++i) {
+        write_out(term::move_to(i+1, 1));
         write_out(i < (int)new_lines.size() ? new_lines[i] : term::CLEAR_EL);
     }
 }

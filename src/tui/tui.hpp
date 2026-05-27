@@ -30,7 +30,7 @@ enum class Key : int {
     CtrlW=23,CtrlX=24,CtrlY=25,CtrlZ=26,
 };
 
-struct InputEvent { Key key = Key::None; char ch = 0; bool alt = false; bool ctrl = false; };
+struct InputEvent { Key key = Key::None; char ch = 0; bool alt = false; bool ctrl = false; std::string text; };
 InputEvent parse_input(const char* buf, size_t len);
 
 class TUI {
@@ -51,13 +51,15 @@ public:
     int content_height() const { return content_height_; }
     bool auto_scroll() const { return auto_scroll_; }
 
-    // Overlays
-    void show_overlay(const std::vector<std::string>& lines);
+    // Overlays with keyboard interaction
+    void show_overlay(const std::vector<std::string>& lines, int cursor = -1);
     void hide_overlay();
     bool overlay_showing() const { return !overlay_lines_.empty(); }
+    int overlay_cursor() const { return overlay_cursor_; }
+    void set_overlay_cursor(int c) { overlay_cursor_ = c; if (c >= 0) request_render(); }
+    // Called when Enter is pressed on an interactive overlay, or when cursor moves
+    std::function<void(int selected, int cursor)> on_overlay_act;
     std::vector<std::string> overlay_lines_;
-
-    // Key handler (return true = handled)
     std::function<bool(InputEvent)> on_key;
 
 private:
@@ -66,8 +68,8 @@ private:
     bool running_ = false;
     Theme theme_;
     int scroll_offset_ = 0, content_height_ = 0;
-    bool auto_scroll_ = true;  // auto-follow bottom
-
+    bool auto_scroll_ = true;
+    int overlay_cursor_ = -1;
     std::vector<std::string> prev_lines_;
     int prev_width_ = 0;
 

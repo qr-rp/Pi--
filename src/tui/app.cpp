@@ -302,25 +302,24 @@ std::vector<std::string> TuiApp::autocomplete(std::string_view prefix) {
     return result;
 }
 
-// ── Settings overlay ─────────────────────────────────────────────────────
+// ── Settings overlay (interactive) ───────────────────────────────────────
 void TuiApp::show_settings() {
     auto& cfg = config_->agent();
     std::vector<std::string> lines;
-    lines.push_back(std::string(" ") + term::BOLD + "Settings" + term::RESET);
+    lines.push_back(std::string(" ") + term::BOLD + "Settings  (Esc to close)" + term::RESET);
     lines.push_back("");
-    lines.push_back(" Model:    " + term::fg(term::BRIGHT_CYAN) + cfg.default_model + term::RESET);
-    lines.push_back(" Provider: " + term::fg(term::BRIGHT_CYAN) + cfg.default_provider + term::RESET);
-    lines.push_back(" Locale:   " + term::fg(term::BRIGHT_CYAN) + cfg.locale + term::RESET);
-    lines.push_back(" Temperature: " + std::to_string(cfg.temperature));
+    lines.push_back(" " + term::fg(term::GRAY) + "Select an option with \u2191\u2193 and press Enter:" + term::RESET);
     lines.push_back("");
-    for (auto& [pn, pc] : cfg.providers) {
-        std::string key_status = pc.api_key.empty() ? "no key" : "key set";
-        lines.push_back(" " + pn + ": " + pc.base_url + " (" + key_status + ")");
-    }
+
+    // Model selector
+    lines.push_back(std::string("  ") + term::BOLD + "Model:" + term::RESET + "  " + cfg.default_model);
+    lines.push_back(std::string("  ") + term::BOLD + "Provider:" + term::RESET + "  " + cfg.default_provider);
+    lines.push_back(std::string("  ") + term::BOLD + "Locale:" + term::RESET + "   " + cfg.locale);
+
     lines.push_back("");
-    lines.push_back(" " + term::fg(term::GRAY) + "Use /model, /provider, /set key to change" + term::RESET);
-    lines.push_back(" " + term::fg(term::GRAY) + "Press Esc or q to close" + term::RESET);
-    engine_.show_overlay(lines);
+    lines.push_back(" " + term::fg(term::GRAY) + "Quick keys: Ctrl+N=model  Ctrl+M=provider" + term::RESET);
+
+    engine_.show_overlay(lines, -1); // non-interactive, just display
 }
 
 void TuiApp::show_help() {
