@@ -1,0 +1,74 @@
+{
+    "app": {
+        "name": "pi-coding-agent",
+        "description": "C++20 コーディングエージェント（LLMプロバイダー・i18n対応）"
+    },
+    "cli": {
+        "usage": "使用方法: pi-coding-agent [オプション] <プロンプト>",
+        "options": "オプション:",
+        "version": "pi-coding-agent v{}",
+        "help": "このヘルプを表示",
+        "model": "使用するモデル（デフォルト: gpt-4o）",
+        "provider": "使用するプロバイダー（デフォルト: openai）",
+        "locale": "i18nロケール（デフォルト: ja）",
+        "list_models": "モデル一覧を表示",
+        "list_providers": "プロバイダー一覧を表示",
+        "interactive": "対話モードで実行（REPLループ）"
+    },
+    "agent": {
+        "thinking": "思考中...",
+        "executing_tool": "ツール実行中: {0}",
+        "tool_result": "ツール結果を受信しました",
+        "error": "エージェントエラー: {0}",
+        "turn_complete": "ターン {0} 完了",
+        "max_turns_reached": "最大ターン数 ({0}) に達しました",
+        "no_tool_calls": "モデルはツール呼び出しを要求しませんでした",
+        "cancelled": "ユーザーにより実行がキャンセルされました"
+    },
+    "tool": {
+        "read": {
+            "description": "ファイルシステムからファイルを読み込む",
+            "error_not_found": "ファイルが見つかりません: {0}",
+            "success": "{1} から {0} バイト読み取りました"
+        },
+        "write": {
+            "description": "ファイルに内容を書き込む",
+            "success": "{1} に {0} バイト書き込みました",
+            "error": "{0} に書き込めません"
+        },
+        "edit": {
+            "description": "テキストを置換してファイルを編集",
+            "success": "{0} を編集しました",
+            "not_found": "{0} にテキストが見つかりません",
+            "multiple": "{0} にテキストが複数見つかりました"
+        },
+        "bash": {
+            "description": "bashコマンドを実行",
+            "error": "コマンドが終了コード {0} で失敗しました",
+            "timeout": "コマンドが {0} 秒でタイムアウトしました"
+        },
+        "search": {
+            "description": "正規表現でファイルを検索",
+            "no_matches": "パターン '{0}' に一致するものはありません",
+            "found": "{1} ファイルで {0} 件一致しました"
+        }
+    },
+    "provider": {
+        "openai": "OpenAIプロバイダー",
+        "deepseek": "DeepSeekプロバイダー（OpenAI互換）",
+        "not_configured": "プロバイダー '{0}' が設定されていません",
+        "api_key_missing": "プロバイダー '{0}' のAPIキーがありません",
+        "model_not_found": "モデル '{0}' が見つかりません"
+    },
+    "session": {
+        "started": "セッションを開始: {0}",
+        "ended": "セッションを終了",
+        "token_count": "使用トークン数: {0}"
+    },
+    "error": {
+        "general": "エラーが発生しました: {0}",
+        "config": "設定エラー: {0}",
+        "network": "ネットワークエラー: {0}",
+        "http_error": "HTTP {0} エラー ({1} API)"
+    }
+}

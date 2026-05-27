@@ -1,0 +1,74 @@
+{
+    "app": {
+        "name": "pi-coding-agent",
+        "description": "C++20 编码代理，支持 LLM 提供商和国际化"
+    },
+    "cli": {
+        "usage": "用法: pi-coding-agent [选项] <提示>",
+        "options": "选项:",
+        "version": "pi-coding-agent v{}",
+        "help": "显示帮助信息",
+        "model": "使用的模型（默认: gpt-4o）",
+        "provider": "使用的提供商（默认: openai）",
+        "locale": "国际化语言（默认: zh-CN）",
+        "list_models": "列出可用模型",
+        "list_providers": "列出可用提供商",
+        "interactive": "以交互模式运行（REPL 循环）"
+    },
+    "agent": {
+        "thinking": "思考中...",
+        "executing_tool": "正在执行工具: {0}",
+        "tool_result": "工具结果已接收",
+        "error": "代理错误: {0}",
+        "turn_complete": "第 {0} 轮完成",
+        "max_turns_reached": "已达到最大轮数 ({0})",
+        "no_tool_calls": "模型未请求工具调用",
+        "cancelled": "执行已被用户取消"
+    },
+    "tool": {
+        "read": {
+            "description": "从文件系统读取文件内容",
+            "error_not_found": "文件未找到: {0}",
+            "success": "已读取 {0} 字节从 {1}"
+        },
+        "write": {
+            "description": "写入内容到文件",
+            "success": "已写入 {0} 字节到 {1}",
+            "error": "无法写入 {0}"
+        },
+        "edit": {
+            "description": "通过替换文本编辑文件",
+            "success": "已编辑 {0}",
+            "not_found": "在 {0} 中未找到文本",
+            "multiple": "在 {0} 中找到多处文本"
+        },
+        "bash": {
+            "description": "执行 bash 命令",
+            "error": "命令失败，退出代码 {0}",
+            "timeout": "命令超时（{0} 秒）"
+        },
+        "search": {
+            "description": "使用正则表达式搜索文件",
+            "no_matches": "未找到模式 '{0}' 的匹配",
+            "found": "在 {1} 个文件中找到 {0} 个匹配"
+        }
+    },
+    "provider": {
+        "openai": "OpenAI 提供商",
+        "deepseek": "DeepSeek 提供商（兼容 OpenAI）",
+        "not_configured": "提供商 '{0}' 未配置",
+        "api_key_missing": "提供商 '{0}' 缺少 API 密钥",
+        "model_not_found": "模型 '{0}' 未找到"
+    },
+    "session": {
+        "started": "会话已开始: {0}",
+        "ended": "会话已结束",
+        "token_count": "已使用令牌数: {0}"
+    },
+    "error": {
+        "general": "发生错误: {0}",
+        "config": "配置错误: {0}",
+        "network": "网络错误: {0}",
+        "http_error": "HTTP {0} 错误来自 {1} API"
+    }
+}

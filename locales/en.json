@@ -1,0 +1,74 @@
+{
+    "app": {
+        "name": "pi-coding-agent",
+        "description": "C++20 coding agent with LLM provider support"
+    },
+    "cli": {
+        "usage": "Usage: pi-coding-agent [options] <prompt>",
+        "options": "Options:",
+        "version": "pi-coding-agent v{}",
+        "help": "Show this help message",
+        "model": "Model to use (default: gpt-4o)",
+        "provider": "Provider to use (default: openai)",
+        "locale": "Locale for i18n (default: en)",
+        "list_models": "List available models",
+        "list_providers": "List available providers",
+        "interactive": "Run in interactive mode (read-eval-print loop)"
+    },
+    "agent": {
+        "thinking": "Thinking...",
+        "executing_tool": "Executing tool: {0}",
+        "tool_result": "Tool result received",
+        "error": "Agent error: {0}",
+        "turn_complete": "Turn {0} complete",
+        "max_turns_reached": "Maximum turns ({0}) reached",
+        "no_tool_calls": "Model did not request any tool calls",
+        "cancelled": "Execution cancelled by user"
+    },
+    "tool": {
+        "read": {
+            "description": "Read file contents from the filesystem",
+            "error_not_found": "File not found: {0}",
+            "success": "Read {0} bytes from {1}"
+        },
+        "write": {
+            "description": "Write content to a file",
+            "success": "Written {0} bytes to {1}",
+            "error": "Cannot write to {0}"
+        },
+        "edit": {
+            "description": "Edit a file by replacing text",
+            "success": "Edited {0}",
+            "not_found": "Text not found in {0}",
+            "multiple": "Text found multiple times in {0}"
+        },
+        "bash": {
+            "description": "Execute a bash command",
+            "error": "Command failed with exit code {0}",
+            "timeout": "Command timed out after {0} seconds"
+        },
+        "search": {
+            "description": "Search files using regex",
+            "no_matches": "No matches found for pattern '{0}'",
+            "found": "Found {0} matches in {1} files"
+        }
+    },
+    "provider": {
+        "openai": "OpenAI provider",
+        "deepseek": "DeepSeek provider (OpenAI-compatible)",
+        "not_configured": "Provider '{0}' is not configured",
+        "api_key_missing": "API key missing for provider '{0}'",
+        "model_not_found": "Model '{0}' not found"
+    },
+    "session": {
+        "started": "Session started: {0}",
+        "ended": "Session ended",
+        "token_count": "Tokens used: {0}"
+    },
+    "error": {
+        "general": "An error occurred: {0}",
+        "config": "Configuration error: {0}",
+        "network": "Network error: {0}",
+        "http_error": "HTTP {0} error from {1} API"
+    }
+}
