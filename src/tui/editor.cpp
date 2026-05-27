@@ -44,6 +44,13 @@ void Editor::move_end(){int idx=cursor_index();cursor_x_=0;while(idx<(int)text_.
 
 std::vector<std::string> Editor::render(int width) {
     auto lines=compute_lines(width);std::vector<std::string> res;int ln=1;
+
+    // Caption/top border (omp-style status in editor header)
+    if(!caption_.empty()){
+        std::string hdr = term::fg(term::GRAY) + "-- " + caption_ + " " + std::string(std::max(0,width-4-(int)caption_.size()), '-') + term::RESET;
+        res.push_back(hdr);
+    }
+
     for(auto& l:lines){std::string p=focused_?term::fg(term::GRAY)+std::format("{:>3}|",ln)+term::RESET:std::format("{:>3} ",ln);std::string line=p+l;if((int)line.size()<width)line.append(width-line.size(),' ');res.push_back(line);ln++;}
     while((int)res.size()<edit_height_){std::string p=focused_?term::fg(term::GRAY)+std::format("{:>3}|",ln)+term::RESET:std::format("{:>3} ",ln);res.push_back(p+std::string(std::max(0,width-(int)p.size()),' '));ln++;}
     std::string bdr(width,'-');res.push_back(focused_?term::fg(term::GRAY)+bdr+term::RESET:bdr);return res;

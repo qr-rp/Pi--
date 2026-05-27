@@ -66,16 +66,17 @@ TuiApp::TuiApp(Config* config, ProviderRegistry* providers, ToolRegistry* tools)
         return false;
     };
 
-    // Layout
+    // ── Layout (matching omp structure) ─────────────────────────────
+    //   chat → editor (with integrated status border) → status_line (bottom bar)
     chat_container_.add(&chat_markdown_);
     root_.add(&chat_container_);
-    root_.add(&status_text_);
     root_.add(&editor_);
     root_.add(&status_line_);
 
     editor_.focus(true);
 
     auto& cfg = config_->agent();
+    editor_.set_caption(cfg.default_model + " | " + cfg.default_provider);
     status_line_.set_model(cfg.default_model);
     status_line_.set_provider(cfg.default_provider);
     status_line_.set_locale(cfg.locale);
@@ -227,7 +228,7 @@ void TuiApp::show_settings() {
     int ps = me + 1, pe = ps + (int)providers.size();
 
     engine_.show_overlay(lines, 2);
-    engine_.on_overlay_act = [this, &kModels, providers, ms, me, ps, pe](int sel, int) {
+    engine_.on_overlay_act = [this, providers, ms, me, ps, pe](int sel, int) {
         if (sel >= ms && sel < me) {
             int idx = sel - ms;
             config_->agent().default_model = kModels[idx]; (void)config_->save();
