@@ -7,7 +7,7 @@ namespace pi::tui {
 
 Editor::Editor() { text_.reserve(4096); }
 void Editor::set_text(std::string_view t) { text_=t; cursor_x_=cursor_y_=0; line_cache_.clear(); invalidate(); }
-void Editor::focus(bool f) { focused_=f; if(f) { cursor_x_=(int)text_.size(); cursor_y_=0; } }
+void Editor::focus(bool f) { focused_=f; if(f){ cursor_x_=(int)text_.size(); cursor_y_=0; } }
 
 std::vector<std::string> Editor::compute_lines(int width) const {
     if(cache_width_==width&&!line_cache_.empty()) return line_cache_;
@@ -17,11 +17,11 @@ std::vector<std::string> Editor::compute_lines(int width) const {
     std::string_view sv(text_); size_t pos=0;
     while(pos<sv.size()){
         auto nl=sv.find('\n',pos);
-        size_t end=(nl==std::string_view::npos)?sv.size():nl;
+        size_t end=(nl==sv.npos)?sv.size():nl;
         std::string_view seg(sv.data()+pos,end-pos);
         size_t start=0;
         while(start<seg.size()){size_t ch=std::min(start+avail,seg.size());line_cache_.push_back(std::string(seg.substr(start,ch-start)));start=ch;}
-        if(nl!=std::string_view::npos){if(end==pos)line_cache_.push_back("");pos=nl+1;}else break;
+        if(nl!=sv.npos){if(end==pos)line_cache_.push_back("");pos=nl+1;}else break;
     }
     if(line_cache_.empty())line_cache_.push_back("");return line_cache_;
 }
@@ -42,95 +42,67 @@ void Editor::move_down(){int idx=cursor_index();while(idx<(int)text_.size()&&tex
 void Editor::move_home(){cursor_x_=0;}
 void Editor::move_end(){int idx=cursor_index();cursor_x_=0;while(idx<(int)text_.size()&&text_[idx]!='\n'){cursor_x_++;idx++;}}
 
+// ─── Rendering (exact omp style: ┌─ caption ───┐ / │ N│ content / └────┘)
 std::vector<std::string> Editor::render(int width) {
-    auto lines=compute_lines(width);std::vector<std::string> res;int ln=1;
+    auto lines=compute_lines(width);
+    std::vector<std::string> res;
+    int ln=1;
 
-    // Caption/top border (omp-style status in editor header)
-    if(!caption_.empty()){
-        std::string hdr = term::fg(term::GRAY) + "-- " + caption_ + " " + std::string(std::max(0,width-4-(int)caption_.size()), '-') + term::RESET;
-        res.push_back(hdr);
+    auto bc=[](std::string_view s){return term::fg(term::BLUE)+std::string(s)+term::RESET;};
+    auto gc=[](std::string_view s){return term::fg(term::GRAY)+std::string(s)+term::RESET;};
+
+    int fw=std::max(0,width-(int)caption_.size()-6);
+    std::string top = bc("\u250C")+bc(fw>0?term::utf8_repeat("\u2500",1):"");
+    if(!caption_.empty()&&fw>0) top+=" "+term::fg(term::CYAN)+caption_+term::RESET+" "+bc(term::utf8_repeat("\u2500",fw));
+    else if(fw>0) top+=bc(term::utf8_repeat("\u2500",fw));
+    top+=bc("\u2510");
+    if((int)top.size()<width) top.append(width-top.size(),' ');
+    res.push_back(top);
+
+    for(auto& l:lines){
+        std::string line=gc(std::format("{:>3}",ln))+"\u2502 "+l;
+        if((int)line.size()<width) line.append(width-line.size(),' ');
+        res.push_back(line); ln++;
+    }
+    while((int)res.size()<edit_height_){
+        std::string line=gc(std::format("{:>3}",ln))+"\u2502";
+        if((int)line.size()<width) line.append(width-line.size(),' ');
+        res.push_back(line); ln++;
     }
 
-    for(auto& l:lines){std::string p=focused_?term::fg(term::GRAY)+std::format("{:>3}|",ln)+term::RESET:std::format("{:>3} ",ln);std::string line=p+l;if((int)line.size()<width)line.append(width-line.size(),' ');res.push_back(line);ln++;}
-    while((int)res.size()<edit_height_){std::string p=focused_?term::fg(term::GRAY)+std::format("{:>3}|",ln)+term::RESET:std::format("{:>3} ",ln);res.push_back(p+std::string(std::max(0,width-(int)p.size()),' '));ln++;}
-    std::string bdr(width,'-');res.push_back(focused_?term::fg(term::GRAY)+bdr+term::RESET:bdr);return res;
+    int bf=std::max(2,width-2);
+    std::string bot=bc("\u2514")+bc(term::utf8_repeat("\u2500",bf))+bc("\u2518");
+    if((int)bot.size()<width) bot.append(width-bot.size(),' ');
+    res.push_back(bot);
+    return res;
 }
 
+// ─── Input handling (exact omp keybindings) ───────────────────────────────
 bool Editor::handle_input(const InputEvent& ev) {
     if(!focused_)return false;
-
-    // Navigation (omp TUI_KEYBINDINGS)
-    if(ev.key==Key::Up){
-        if(history_.empty())return true;
-        if(history_pos_>0){if(history_pos_==(int)history_.size())saved_input_=text_;history_pos_--;set_text(history_[history_pos_]);}
-        return true;
-    }
-    if(ev.key==Key::Down){
-        if(history_pos_<(int)history_.size()-1){history_pos_++;set_text(history_[history_pos_]);}
-        else if(history_pos_==(int)history_.size()-1){history_pos_=(int)history_.size();set_text(saved_input_);}
-        return true;
-    }
+    if(ev.key==Key::Up){if(history_.empty())return true;if(history_pos_>0){if(history_pos_==(int)history_.size())saved_input_=text_;history_pos_--;set_text(history_[history_pos_]);}return true;}
+    if(ev.key==Key::Down){if(history_pos_<(int)history_.size()-1){history_pos_++;set_text(history_[history_pos_]);}else if(history_pos_==(int)history_.size()-1){history_pos_=(int)history_.size();set_text(saved_input_);}return true;}
     if(ev.key==Key::Left||(ev.key==Key::CtrlB&&!ev.alt)){move_left();return true;}
     if(ev.key==Key::Right||(ev.key==Key::CtrlF&&!ev.alt)){move_right();return true;}
     if(ev.key==Key::Home||ev.key==Key::CtrlA){move_home();return true;}
     if(ev.key==Key::End||ev.key==Key::CtrlE){move_end();return true;}
-
-    // Word movement: Alt+B/F, Alt+left/right (omp: cursorWordLeft/Right)
-    if((ev.alt&&(ev.ch=='b'||ev.ch=='B'))){
-        int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]==' ')st--;while(st>0&&text_[st-1]!=' '&&text_[st-1]!='\n')st--;
-        cursor_from_index(st);return true;
-    }
-    if((ev.alt&&(ev.ch=='f'||ev.ch=='F'))){
-        int idx=cursor_index(),en=idx;while(en<(int)text_.size()&&text_[en]!=' '&&text_[en]!='\n')en++;
-        while(en<(int)text_.size()&&text_[en]==' ')en++;cursor_from_index(en);return true;
-    }
-
-    // Deletion (omp)
+    // Word movement
+    if((ev.alt&&(ev.ch=='b'||ev.ch=='B'))){int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]==' ')st--;while(st>0&&text_[st-1]!=' '&&text_[st-1]!='\n')st--;cursor_from_index(st);return true;}
+    if((ev.alt&&(ev.ch=='f'||ev.ch=='F'))){int idx=cursor_index(),en=idx;while(en<(int)text_.size()&&text_[en]!=' '&&text_[en]!='\n')en++;while(en<(int)text_.size()&&text_[en]==' ')en++;cursor_from_index(en);return true;}
+    // Deletion
     if(ev.key==Key::Backspace||ev.key==Key::CtrlH){backspace();return true;}
     if(ev.key==Key::Delete||ev.key==Key::CtrlD){del();return true;}
-    if(ev.key==Key::CtrlW||(ev.alt&&ev.ch==127)||(ev.ctrl&&ev.key==Key::Backspace)){
-        int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]==' ')st--;while(st>0&&text_[st-1]!=' ')st--;
-        text_.erase(st,idx-st);cursor_from_index(st);line_cache_.clear();invalidate();return true;
-    }
-    if((ev.alt&&ev.ch=='d')||(ev.alt&&ev.key==Key::Delete)){
-        int idx=cursor_index(),en=idx;while(en<(int)text_.size()&&text_[en]!=' '&&text_[en]!='\n')en++;
-        while(en<(int)text_.size()&&text_[en]==' ')en++;text_.erase(idx,en-idx);line_cache_.clear();invalidate();return true;
-    }
-    if(ev.key==Key::CtrlK){ // deleteToLineEnd
-        int idx=cursor_index();auto nl=text_.find('\n',idx);
-        if(nl==std::string_view::npos)text_.erase(idx);else text_.erase(idx,nl-idx);
-        line_cache_.clear();invalidate();return true;
-    }
-    if(ev.key==Key::CtrlU){ // deleteToLineStart
-        int idx=cursor_index(),sol=(int)text_.rfind('\n',idx-1);
-        if(sol<0)sol=0;else sol++;text_.erase(sol,idx-sol);cursor_from_index(sol);
-        line_cache_.clear();invalidate();return true;
-    }
-
-    // Yank / Undo (stubs for now)
-    if(ev.key==Key::CtrlY){return true;}
-    if((ev.alt&&ev.ch=='y')){return true;}
-    // undo stub removed - Ctrl+_ and Ctrl+- not easily parsed
-    // Tab / autocomplete
-    if(ev.key==Key::Tab){
-        int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]!=' '&&text_[st-1]!='\n')st--;
-        std::string pref=text_.substr(st,idx-st);
-        if(on_tab&&!pref.empty()){auto c=on_tab(pref);if(c.size()==1){text_.erase(st,idx-st);text_.insert(st,c[0]);cursor_from_index(st+(int)c[0].size());line_cache_.clear();invalidate();return true;}}
-        insert(' ');return true;
-    }
-
-    // Submit (Enter = submit, Shift+Enter = newline per omp)
-    if(ev.key==Key::Enter){
-        if(ev.alt){/*Alt+Enter=followUp in omp === submit */;}
-        if(on_submit&&!text_.empty()){
-            history_.push_back(text_);history_pos_=(int)history_.size();
-            text_.clear();cursor_x_=cursor_y_=0;line_cache_.clear();invalidate();
-            on_submit(history_.back());
-        }
-        return true;
-    }
+    if(ev.key==Key::CtrlW||(ev.alt&&ev.ch==127)||(ev.ctrl&&ev.key==Key::Backspace)){int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]==' ')st--;while(st>0&&text_[st-1]!=' ')st--;text_.erase(st,idx-st);cursor_from_index(st);line_cache_.clear();invalidate();return true;}
+    if((ev.alt&&ev.ch=='d')||(ev.alt&&ev.key==Key::Delete)){int idx=cursor_index(),en=idx;while(en<(int)text_.size()&&text_[en]!=' '&&text_[en]!='\n')en++;while(en<(int)text_.size()&&text_[en]==' ')en++;text_.erase(idx,en-idx);line_cache_.clear();invalidate();return true;}
+    if(ev.key==Key::CtrlK){int idx=cursor_index();auto nl=text_.find('\n',idx);if(nl==std::string_view::npos)text_.erase(idx);else text_.erase(idx,nl-idx);line_cache_.clear();invalidate();return true;}
+    if(ev.key==Key::CtrlU){int idx=cursor_index(),sol=(int)text_.rfind('\n',idx-1);if(sol<0)sol=0;else sol++;text_.erase(sol,idx-sol);cursor_from_index(sol);line_cache_.clear();invalidate();return true;}
+    // Yank / Undo (stubs)
+    if(ev.key==Key::CtrlY){return true;}if((ev.alt&&ev.ch=='y')){return true;}
+    // Tab
+    if(ev.key==Key::Tab){int idx=cursor_index(),st=idx;while(st>0&&text_[st-1]!=' '&&text_[st-1]!='\n')st--;std::string pref=text_.substr(st,idx-st);if(on_tab&&!pref.empty()){auto c=on_tab(pref);if(c.size()==1){text_.erase(st,idx-st);text_.insert(st,c[0]);cursor_from_index(st+(int)c[0].size());line_cache_.clear();invalidate();return true;}}insert(' ');return true;}
+    // Enter
+    if(ev.key==Key::Enter){if(ev.alt){;}if(on_submit&&!text_.empty()){history_.push_back(text_);history_pos_=(int)history_.size();text_.clear();cursor_x_=cursor_y_=0;line_cache_.clear();invalidate();on_submit(history_.back());}return true;}
     if(ev.key==Key::ShiftTab){return true;}
-
     // UTF-8 / printable
     if(!ev.text.empty()){int idx=cursor_index();text_.insert(idx,ev.text);cursor_x_++;line_cache_.clear();invalidate();return true;}
     if(ev.ch>=0x20){insert(ev.ch);return true;}
