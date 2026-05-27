@@ -42,4 +42,13 @@ std::string strip_ansi(std::string_view s) {
     return out;
 }
 
+std::string scroll_indicator(int shown, int total, int width) {
+    if (shown >= total) return "";
+    int hidden = total - shown;
+    std::string txt = std::format(" \u2191 {} more lines ", hidden);
+    if ((int)txt.size() > width) return "";
+    std::string line(width - txt.size(), ' ');
+    line += txt;
+    return fg(GRAY) + line + RESET;
+}
 } // namespace pi::term

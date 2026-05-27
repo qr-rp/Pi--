@@ -48,8 +48,36 @@ TuiApp::TuiApp(Config* config, ProviderRegistry* providers, ToolRegistry* tools)
             append_chat("[Cancelled]");
             return true;
         }
-        if (ev.key == tui::Key::CtrlZ && agent_busy_) {
-            // Cycle fold state for tool calls
+        // Ctrl+N: cycle to next model
+        if (ev.key == tui::Key::CtrlN && !engine_.overlay_showing()) {
+            auto& cfg = config_->agent();
+            static const std::vector<std::string> kModels = {
+                "gpt-4o", "gpt-4o-mini", "deepseek-chat", "deepseek-reasoner",
+                "claude-sonnet-4-20250514", "gemini-2.5-pro"
+            };
+            auto it = std::find(kModels.begin(), kModels.end(), cfg.default_model);
+            int idx = 0;
+            if (it != kModels.end()) idx = (it - kModels.begin() + 1) % kModels.size();
+            cfg.default_model = kModels[idx];
+            (void)config_->save();
+            status_line_.set_model(cfg.default_model);
+            append_chat(std::format("Model cycled to: {}", cfg.default_model));
+            return true;
+        }
+        // Ctrl+M: cycle to next provider
+        if (ev.key == tui::Key::CtrlM && !engine_.overlay_showing()) {
+            auto& cfg = config_->agent();
+            std::vector<std::string> providers;
+            for (auto& [pn, _] : cfg.providers) providers.push_back(pn);
+            if (!providers.empty()) {
+                auto it = std::find(providers.begin(), providers.end(), cfg.default_provider);
+                int idx = 0;
+                if (it != providers.end()) idx = (it - providers.begin() + 1) % providers.size();
+                cfg.default_provider = providers[idx];
+                (void)config_->save();
+                status_line_.set_provider(cfg.default_provider);
+                append_chat(std::format("Provider cycled to: {}", cfg.default_provider));
+            }
             return true;
         }
         return false;
