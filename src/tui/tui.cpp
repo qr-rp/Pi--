@@ -120,6 +120,9 @@ void TUI::run(Container* root) {
 
     render_thread_ = std::thread([this] { render_loop(); });
 
+    // Synchronous initial render before entering input loop
+    do_render();
+
     while (running_) {
         char buf[32];
         ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
