@@ -17,10 +17,12 @@ static void enable_raw_mode() {
     termios_saved = true;
     termios raw = original_termios;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~(OPOST);
+    // Keep OPOST so \n translates to \r\n (carriage return)
+    raw.c_oflag &= ~(OCRNL | ONLRET | ONOCR);
     raw.c_cflag |= (CS8);
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 1; raw.c_cc[VTIME] = 0;
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
