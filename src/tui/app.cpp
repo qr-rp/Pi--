@@ -17,33 +17,52 @@ TuiApp::TuiApp(Config* config, ProviderRegistry* providers, ToolRegistry* tools)
     editor_.on_submit = [this](const std::string& t) { on_editor_submit(t); };
     editor_.on_tab = [this](std::string_view p) { return autocomplete(p); };
 
-    // Keyboard
+    // ── Global keybindings (matching omp exactly) ─────────────────────
     engine_.on_key = [this](tui::InputEvent ev) -> bool {
-        if (ev.key == tui::Key::CtrlP && !engine_.overlay_showing()) { show_settings(); return true; }
-        if (ev.key == tui::Key::CtrlH && !engine_.overlay_showing()) { show_help(); return true; }
-        if (ev.key == tui::Key::CtrlQ) { save_session(); engine_.stop(); return true; }
-        if (ev.key == tui::Key::CtrlC && agent_busy_) { agent_.cancel(); agent_busy_ = false; append_chat("[Cancelled]"); return true; }
-        if (ev.key == tui::Key::CtrlZ && chat_markdown_.tool_call_count() > 0) {
-            chat_markdown_.toggle_fold(chat_markdown_.active_fold()); return true;
+        // omp: app.clear = ctrl+c (cancel/interrupt)
+        if (ev.key == tui::Key::CtrlC) {
+            if (agent_busy_) { agent_.cancel(); agent_busy_ = false; append_chat("[Cancelled]"); }
+            else { /* clear screen - terminal cleared by TUI */ }
+            return true;
         }
-        if (ev.key == tui::Key::CtrlN && !engine_.overlay_showing()) {
+        // omp: app.exit = ctrl+d
+        if (ev.key == tui::Key::CtrlD) { save_session(); engine_.stop(); return true; }
+        // omp: app.suspend = ctrl+z
+        if (ev.key == tui::Key::CtrlZ && !engine_.overlay_showing()) {
+            if (chat_markdown_.tool_call_count() > 0) {
+                chat_markdown_.toggle_fold(chat_markdown_.active_fold());
+            }
+            return true;
+        }
+        // omp: app.interrupt = escape (when not in overlay)
+        if (ev.key == tui::Key::Escape && !engine_.overlay_showing()) {
+            if (agent_busy_) { agent_.cancel(); agent_busy_ = false; append_chat("[Cancelled]"); return true; }
+            return false;
+        }
+        // omp: app.model.cycleForward = ctrl+p
+        if (ev.key == tui::Key::CtrlP && !engine_.overlay_showing()) {
             static const std::vector<std::string> ms = {"gpt-4o","gpt-4o-mini","deepseek-chat","deepseek-reasoner","claude-sonnet-4-20250514","gemini-2.5-pro"};
             auto it = std::find(ms.begin(), ms.end(), config_->agent().default_model);
             int idx = it != ms.end() ? (it - ms.begin() + 1) % ms.size() : 0;
             config_->agent().default_model = ms[idx]; (void)config_->save();
             status_line_.set_model(ms[idx]); append_chat("Model: " + ms[idx]); return true;
         }
-        if (ev.key == tui::Key::CtrlM && !engine_.overlay_showing()) {
-            std::vector<std::string> ps;
-            for (auto& [pn,_] : config_->agent().providers) ps.push_back(pn);
-            if (!ps.empty()) {
-                auto it = std::find(ps.begin(), ps.end(), config_->agent().default_provider);
-                int idx = it != ps.end() ? (it - ps.begin() + 1) % ps.size() : 0;
-                config_->agent().default_provider = ps[idx]; (void)config_->save();
-                status_line_.set_provider(ps[idx]); append_chat("Provider: " + ps[idx]);
-            }
-            return true;
+        // omp: app.model.select = ctrl+l
+        if (ev.key == tui::Key::CtrlL && !engine_.overlay_showing()) {
+            show_settings(); return true;
         }
+        // omp: app.thinking.toggle = ctrl+t  (stub)
+        if (ev.key == tui::Key::CtrlT && !engine_.overlay_showing()) { return true; }
+        // omp: app.editor.external = ctrl+g (stub)
+        if (ev.key == tui::Key::CtrlG && !engine_.overlay_showing()) { return true; }
+        // omp: app.tools.expand = ctrl+o (stub)
+        if (ev.key == tui::Key::CtrlO && !engine_.overlay_showing()) { return true; }
+        // omp: app.history.search = ctrl+r (stub)
+        if (ev.key == tui::Key::CtrlR && !engine_.overlay_showing()) { return true; }
+        // omp: app.thinking.cycle = shift+tab
+        if (ev.key == tui::Key::ShiftTab && !engine_.overlay_showing()) { return true; }
+        // omp: app.message.followUp = ctrl+enter (pass through to editor)
+        // omp: app.message.dequeue = alt+up (pass through to editor)
         return false;
     };
 
@@ -60,14 +79,16 @@ TuiApp::TuiApp(Config* config, ProviderRegistry* providers, ToolRegistry* tools)
     status_line_.set_model(cfg.default_model);
     status_line_.set_provider(cfg.default_provider);
     status_line_.set_locale(cfg.locale);
-    status_line_.set_hint("Ctrl+P:Settings  Ctrl+H:Help  Ctrl+Q:Quit");
+    status_line_.set_hint("Ctrl+P:Next model  Ctrl+L:Select model  Ctrl+D:Quit");
 
     load_session();
     if (chat_markdown_.text().empty()) {
         append_chat("## pi-coding-agent");
         append_chat("C++23 coding agent with LLM support.");
-        append_chat("  - Type a message and press Enter");
-        append_chat("  - Ctrl+P: Settings panel  Ctrl+H: Help  Ctrl+Z: Fold tool calls");
+        append_chat("  - Type a message at the prompt and press Enter");
+        append_chat("  - Ctrl+P: Next model    Ctrl+L: Model selector");
+        append_chat("  - Ctrl+C: Cancel        Ctrl+D: Quit");
+        append_chat("  - Ctrl+Z: Fold tool calls");
     }
 }
 

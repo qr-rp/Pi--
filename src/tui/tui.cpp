@@ -59,10 +59,17 @@ InputEvent parse_input(const char* buf, size_t len) {
                 case '5': if (len > 3 && buf[3] == '~') ev.key = Key::PageUp; break;
                 case '6': if (len > 3 && buf[3] == '~') ev.key = Key::PageDown; break;
                 case '3': if (len > 3 && buf[3] == '~') ev.key = Key::Delete; break;
+                case 'Z': ev.key = Key::ShiftTab; break; // CSI Z = shift+tab
             }
             if (ev.key != Key::None) return ev;
         }
-        if (len >= 2) { ev.alt = true; ev.ch = buf[1]; }
+        // Alt+key sequences: ESC followed by a character
+        if (len >= 2) {
+            ev.alt = true;
+            ev.ch = buf[1];
+            ev.text = std::string(buf + 1, len - 1);
+            return ev;
+        }
         return ev;
     }
     if ((unsigned char)buf[0] < 0x20 || buf[0] == 0x7F) {
