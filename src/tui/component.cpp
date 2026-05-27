@@ -1,5 +1,5 @@
 #include "component.hpp"
-#include <algorithm>
+#include "tui.hpp"
 
 namespace pi::tui {
 
@@ -8,9 +8,7 @@ void Container::remove(Component* child) {
     if (it != children.end()) children.erase(it);
 }
 
-void Container::clear() {
-    children.clear();
-}
+void Container::clear() { children.clear(); }
 
 std::vector<std::string> Container::render(int width) {
     std::vector<std::string> result;
@@ -24,6 +22,19 @@ std::vector<std::string> Container::render(int width) {
 void Container::invalidate() {
     Component::invalidate();
     for (auto* child : children) child->invalidate();
+}
+
+bool Container::handle_input(const InputEvent& ev) {
+    for (auto* child : children) {
+        if (child->focused() && child->handle_input(ev))
+            return true;
+    }
+    // Fallback: try each child in reverse (last focused first)
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        if ((*it)->handle_input(ev))
+            return true;
+    }
+    return false;
 }
 
 } // namespace pi::tui
